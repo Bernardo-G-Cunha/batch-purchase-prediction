@@ -228,4 +228,5 @@ deprecated/
 mlruns/
 
 *.parquet
+!research/data/processed/processed_data.parquet
 *.csv
