@@ -22,6 +22,17 @@ from .feature_engineering import (
     create_purchase_target
     )
 
+from .modeling import (
+    evaluate_model, 
+    threshold_analysis, 
+    ranking_analysis, 
+    plot_roc_curves, 
+    plot_precision_recall_curves, 
+    plot_calibration, 
+    generate_oof_predictions, 
+    logit, 
+    calibrate_probability
+    )
 
 __all__ = [
     "plot_histogram",
@@ -38,5 +49,15 @@ __all__ = [
     "create_sessions",
     "aggregate_session_statistics",
     "add_rolling_session_features",
-    "create_purchase_target"
+    "create_purchase_target",
+    "evaluate_model", 
+    "threshold_analysis", 
+    "ranking_analysis",
+    "plot_roc_curves", 
+    "plot_precision_recall_curves", 
+    "plot_calibration",
+    "plot_calibration_comparison",
+    "generate_oof_predictions",
+    "logit", 
+    "calibrate_probability"
 ]

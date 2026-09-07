@@ -1,0 +1,23 @@
+artifact_path: /mnt/c/Users/sysam/Documents/Projetos-Git/ml-platform/research/notebooks/mlruns/1/models/m-72a6c7050fff4231b505a00e03b17aea/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.12.3
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.9.0
+    skops_trusted_types: null
+mlflow_version: 3.15.2
+model_id: m-72a6c7050fff4231b505a00e03b17aea
+model_size_bytes: 694
+model_uuid: m-72a6c7050fff4231b505a00e03b17aea
+prompts: null
+run_id: 240d8b4452bb429884aef90091867a72
+utc_time_created: '2026-09-07 20:48:48.493455'
