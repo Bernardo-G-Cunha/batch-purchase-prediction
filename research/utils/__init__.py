@@ -15,6 +15,13 @@ from .analysis import (
     build_category_depth
     )
 
+from .feature_engineering import (
+    create_sessions, 
+    aggregate_session_statistics, 
+    add_rolling_session_features, 
+    create_purchase_target
+    )
+
 
 __all__ = [
     "plot_histogram",
@@ -27,5 +34,9 @@ __all__ = [
     "build_funnel",
     "compute_conversion_rates",
     "conversion_summary",
-    "build_category_depth"
+    "build_category_depth",
+    "create_sessions",
+    "aggregate_session_statistics",
+    "add_rolling_session_features",
+    "create_purchase_target"
 ]
