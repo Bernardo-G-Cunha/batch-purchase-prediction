@@ -1,0 +1,10 @@
+# Overrides aplicados por cima de base.yaml quando APP_ENV=dev.
+# Só precisa declarar o que difere do base.yaml — o merge é feito
+# chave a chave (nested), não substitui o dicionário inteiro.
+
+mlflow:
+  tracking_uri: http://localhost:5000  # MLflow tracking server local via Docker
+
+logging:
+  level: DEBUG
+  json_format: false  # logs legíveis no terminal durante desenvolvimento

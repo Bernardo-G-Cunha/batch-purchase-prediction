@@ -1,0 +1,19 @@
+storage:
+  mode: local
+  local_base_path: ./data
+  raw_path: ./data/raw
+  quarantine_path: ./data/quarantine
+  account_name: null  # set in prod/staging yaml, or via env var later if needed
+
+medallion:
+  bronze_container: bronze
+  silver_container: silver
+  gold_container: gold
+
+mlflow:
+  experiment_name: RetailRocket_Purchase_Prediction
+  tracking_uri: null  # sobrescrito por MLFLOW_TRACKING_URI se definido
+
+logging:
+  level: INFO
+  json_format: true
