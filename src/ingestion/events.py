@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
@@ -19,6 +21,40 @@ def read_raw_events(spark: SparkSession) -> DataFrame:
     logger.info("Reading raw events", extra={"path": path})
 
     return spark.read.parquet(path)
+
+
+def get_reference_date(df: DataFrame):
+    """Get the latest event date available in the raw dataset."""
+
+    return (
+        df
+        .select(F.max(F.to_date("timestamp")).alias("reference_date"))
+        .collect()[0]["reference_date"]
+    )
+
+
+def filter_feature_window(
+    df: DataFrame,
+    reference_date,
+) -> DataFrame:
+    """Keep the 31-day window required for feature generation."""
+
+    start_date = reference_date - timedelta(days=30)
+
+    logger.info(
+        "Filtering ingestion window",
+        extra={
+            "start_date": str(start_date),
+            "reference_date": str(reference_date),
+        },
+    )
+
+    return df.filter(
+        F.to_date("timestamp").between(
+            F.lit(start_date),
+            F.lit(reference_date),
+        )
+    )
 
 
 def cast_to_bronze(df: DataFrame) -> DataFrame:
@@ -47,7 +83,14 @@ def write_bronze(df: DataFrame) -> None:
 def run(spark: SparkSession) -> None:
     raw_df = read_raw_events(spark)
 
-    bronze_df = cast_to_bronze(raw_df)
+    reference_date = get_reference_date(raw_df)
+
+    filtered_df = filter_feature_window(
+        raw_df,
+        reference_date,
+    )
+
+    bronze_df = cast_to_bronze(filtered_df)
 
     write_bronze(bronze_df)
 
