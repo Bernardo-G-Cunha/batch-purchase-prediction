@@ -30,6 +30,7 @@ class StorageConfig(BaseModel):
     local_base_path: str = "./data"
     raw_path: str = "./data/raw"
     quarantine_path: str = "./data/quarantine"
+    inference_path: str = "./data/inference"
     account_name: str | None = None
 
 
