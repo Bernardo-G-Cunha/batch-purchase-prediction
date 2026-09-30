@@ -3,7 +3,7 @@
 # chave a chave (nested), não substitui o dicionário inteiro.
 
 mlflow:
-  tracking_uri: http://localhost:5000  # MLflow tracking server local via Docker
+  tracking_uri: http://127.0.0.1:5000
 
 logging:
   level: DEBUG
