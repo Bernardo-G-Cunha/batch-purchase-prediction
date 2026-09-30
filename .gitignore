@@ -229,6 +229,14 @@ deprecated/
 !research/data/processed/processed_data.parquet
 *.csv
 
+# MLflow
 **/mlruns/
 **/mlflow/artifacts/
 mlflow.db
+
+# Airflow
+**/logs/
+airflow.db
+airflow.cfg
+airflow-webserver.pid
+simple_auth_manager_passwords.json.generated
