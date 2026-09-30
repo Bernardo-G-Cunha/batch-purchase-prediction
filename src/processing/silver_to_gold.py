@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import timedelta
-
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
@@ -12,43 +10,66 @@ from src.common.storage_paths import layer_path
 
 logger = get_logger(__name__)
 
+EPOCH_DATE = "1970-01-01"
+
 
 def read_silver(spark: SparkSession) -> DataFrame:
     """Read Silver layer."""
+
     silver_path = layer_path("silver")
-    
-    logger.info("Reading silver", extra={"path": silver_path})
+
+    logger.info(
+        "Reading silver",
+        extra={"path": silver_path},
+    )
 
     return spark.read.parquet(silver_path)
 
 
+def add_snapshot_day(df: DataFrame) -> DataFrame:
+    """Add the integer day index used by feature windows."""
+
+    return df.withColumn(
+        "snapshot_day",
+        F.datediff(
+            F.to_date("event_time"),
+            F.lit(EPOCH_DATE),
+        ),
+    )
+
+
 def build_snapshot_dates(df: DataFrame) -> DataFrame:
-    """Build visitor-day snapshots including the inference date."""
+    """Build visitor-day snapshots including the inference day."""
 
-    df = df.withColumn(
-        "date",
-        F.to_date("event_time")
-    )
-
-    reference_date = (
+    reference_snapshot_day = (
         df
-        .select(F.max("date").alias("reference_date"))
-        .collect()[0]["reference_date"]
+        .select(
+            F.max("snapshot_day").alias("reference_snapshot_day")
+        )
+        .collect()[0]["reference_snapshot_day"]
     )
 
-    inference_date = reference_date + timedelta(days=1)
+    if reference_snapshot_day is None:
+        raise ValueError("Silver dataset is empty.")
 
-    historical_snapshots = df.select(
-        "visitorid",
-        "date",
-    ).distinct()
+    inference_snapshot_day = reference_snapshot_day + 1
+
+    historical_snapshots = (
+        df
+        .select(
+            "visitorid",
+            "snapshot_day",
+        )
+        .distinct()
+    )
 
     inference_snapshots = (
-        df.select("visitorid")
+        df
+        .select("visitorid")
         .distinct()
         .withColumn(
-            "date",
-            F.lit(inference_date),
+            "snapshot_day",
+            F.lit(inference_snapshot_day).cast("int"),
         )
     )
 
@@ -59,58 +80,61 @@ def build_snapshot_dates(df: DataFrame) -> DataFrame:
     )
 
 
-def build_user_behavior(silver_df: DataFrame, snapshot_data: DataFrame) -> DataFrame:
+def build_user_behavior(
+    silver_df: DataFrame,
+    snapshot_data: DataFrame,
+) -> DataFrame:
     """Build rolling user behavior features from Silver events."""
-
-    silver_df = silver_df.withColumn("date",  F.to_date("event_time"))
 
     # One row per visitor/day.
     daily = (
         silver_df
-        .groupBy("visitorid", "date")
+        .groupBy("visitorid", "snapshot_day")
         .agg(
             F.sum(
-                F.when(F.col("event") == "view", 1).otherwise(0)
+                F.when(
+                    F.col("event") == "view",
+                    1,
+                ).otherwise(0)
             ).alias("views"),
             F.sum(
-                F.when(F.col("event") == "addtocart", 1).otherwise(0)
+                F.when(
+                    F.col("event") == "addtocart",
+                    1,
+                ).otherwise(0)
             ).alias("addtocarts"),
             F.sum(
-                F.when(F.col("event") == "transaction", 1).otherwise(0)
+                F.when(
+                    F.col("event") == "transaction",
+                    1,
+                ).otherwise(0)
             ).alias("transactions"),
         )
         .join(
             snapshot_data,
-            on=["visitorid", "date"],
-            how="right"
+            on=["visitorid", "snapshot_day"],
+            how="right",
         )
         .withColumn(
             "views",
             F.coalesce(
                 F.col("views"),
-                F.lit(0)
-            )
+                F.lit(0),
+            ),
         )
         .withColumn(
             "addtocarts",
             F.coalesce(
                 F.col("addtocarts"),
-                F.lit(0)
-            )
+                F.lit(0),
+            ),
         )
         .withColumn(
             "transactions",
             F.coalesce(
                 F.col("transactions"),
-                F.lit(0)
-            )
-        )        
-        .withColumn(
-            "snapshot_day",
-            F.datediff(
-                F.col("date"),
-                F.lit("1970-01-01")
-            )
+                F.lit(0),
+            ),
         )
     )
 
@@ -153,7 +177,13 @@ def build_user_behavior(silver_df: DataFrame, snapshot_data: DataFrame) -> DataF
         )
     )
 
-    return features.select("visitorid", "date", "user_views_7d", "user_addtocart_7d", "user_transactions_30d")
+    return features.select(
+        "visitorid",
+        "snapshot_day",
+        "user_views_7d",
+        "user_addtocart_7d",
+        "user_transactions_30d",
+    )
 
 
 def add_session_boundaries(df: DataFrame) -> DataFrame:
@@ -169,11 +199,12 @@ def add_session_boundaries(df: DataFrame) -> DataFrame:
         df
         .withColumn(
             "previous_event_time",
-            F.lag("event_time").over(window)
+            F.lag("event_time").over(window),
         )
         .withColumn(
             "time_diff",
-            F.col("event_time") - F.col("previous_event_time")
+            F.col("event_time")
+            - F.col("previous_event_time"),
         )
         .withColumn(
             "new_session",
@@ -183,8 +214,8 @@ def add_session_boundaries(df: DataFrame) -> DataFrame:
                     F.col("time_diff")
                     > F.expr("INTERVAL 30 MINUTES")
                 ),
-                1
-            ).otherwise(0)
+                1,
+            ).otherwise(0),
         )
     )
 
@@ -198,13 +229,13 @@ def add_session_id(df: DataFrame) -> DataFrame:
         .orderBy("event_time")
         .rowsBetween(
             Window.unboundedPreceding,
-            Window.currentRow
+            Window.currentRow,
         )
     )
 
     return df.withColumn(
         "session_id",
-        F.sum("new_session").over(session_window)
+        F.sum("new_session").over(session_window),
     )
 
 
@@ -213,7 +244,10 @@ def aggregate_sessions(df: DataFrame) -> DataFrame:
 
     sessions = (
         df
-        .groupBy("visitorid", "session_id")
+        .groupBy(
+            "visitorid",
+            "session_id",
+        )
         .agg(
             F.min("event_time").alias("session_start"),
             F.max("event_time").alias("session_end"),
@@ -225,43 +259,58 @@ def aggregate_sessions(df: DataFrame) -> DataFrame:
         F.timestamp_diff(
             "SECOND",
             F.col("session_start"),
-            F.col("session_end")
-        ) / 60.0
+            F.col("session_end"),
+        ) / 60.0,
     )
 
-def build_daily_session_stats(sessions: DataFrame) -> DataFrame:
-    """Aggregate session statistics by visitor and session start date."""
 
-    sessions = sessions.withColumn(
-        "date",
-        F.to_date("session_start")
-    )
+def build_daily_session_stats(
+    sessions: DataFrame,
+) -> DataFrame:
+    """Aggregate session statistics by visitor and session start day."""
 
     return (
         sessions
-        .groupBy("visitorid", "date")
+        .withColumn(
+            "snapshot_day",
+            F.datediff(
+                F.to_date("session_start"),
+                F.lit(EPOCH_DATE),
+            ),
+        )
+        .groupBy(
+            "visitorid",
+            "snapshot_day",
+        )
         .agg(
-            F.sum("session_duration_min").alias("total_duration"),
-            F.count("session_id").alias("sessions"),
+            F.sum("session_duration_min")
+            .alias("total_duration"),
+            F.count("session_id")
+            .alias("sessions"),
         )
     )
+
 
 def align_session_stats_with_snapshots(
     daily_session_stats: DataFrame,
     snapshot_data: DataFrame,
 ) -> DataFrame:
-    """Add zero-valued session statistics for snapshot dates without sessions."""
+    """Add zero-valued session statistics for snapshot days without sessions."""
 
-    snapshots = snapshot_data.select(
-        "visitorid",
-        "date",
-    ).dropDuplicates()
+    snapshots = (
+        snapshot_data
+        .select(
+            "visitorid",
+            "snapshot_day",
+        )
+        .dropDuplicates()
+    )
 
     return (
         daily_session_stats
         .join(
             snapshots,
-            on=["visitorid", "date"],
+            on=["visitorid", "snapshot_day"],
             how="right",
         )
         .withColumn(
@@ -285,14 +334,6 @@ def build_rolling_session_features(
     daily_session_stats: DataFrame,
 ) -> DataFrame:
     """Build 30-day rolling session features."""
-
-    daily_session_stats = daily_session_stats.withColumn(
-        "snapshot_day",
-        F.datediff(
-            F.col("date"),
-            F.lit("1970-01-01"),
-        )
-    )
 
     window_30d = (
         Window
@@ -329,7 +370,7 @@ def build_rolling_session_features(
 
     return features.select(
         "visitorid",
-        "date",
+        "snapshot_day",
         "user_sessions_30d",
         "avg_session_duration_30d",
     )
@@ -342,12 +383,13 @@ def build_session_features(
     """Build rolling session features from Silver events."""
 
     df = add_session_boundaries(silver_df)
-
     df = add_session_id(df)
 
     sessions = aggregate_sessions(df)
 
-    daily_session_stats = build_daily_session_stats(sessions)
+    daily_session_stats = build_daily_session_stats(
+        sessions
+    )
 
     daily_session_stats = align_session_stats_with_snapshots(
         daily_session_stats,
@@ -359,19 +401,23 @@ def build_session_features(
     )
 
 
-def build_item_popularity_features(df: DataFrame, snapshot_data: DataFrame) -> DataFrame:
+def build_item_popularity_features(
+    df: DataFrame,
+    snapshot_data: DataFrame,
+) -> DataFrame:
     """Build cart item popularity and top-seller features."""
-
-    df = df.withColumn(
-        "date",
-        F.to_date("event_time")
-    )
 
     item_daily_transactions = (
         df
         .filter(F.col("event") == "transaction")
-        .select("itemid", "date")
-        .groupBy("itemid", "date")
+        .select(
+            "itemid",
+            "snapshot_day",
+        )
+        .groupBy(
+            "itemid",
+            "snapshot_day",
+        )
         .agg(
             F.count("*").alias("transactions")
         )
@@ -383,7 +429,7 @@ def build_item_popularity_features(df: DataFrame, snapshot_data: DataFrame) -> D
         .distinct()
         .crossJoin(
             df
-            .select("date")
+            .select("snapshot_day")
             .distinct()
         )
     )
@@ -392,22 +438,15 @@ def build_item_popularity_features(df: DataFrame, snapshot_data: DataFrame) -> D
         base
         .join(
             item_daily_transactions,
-            on=["itemid", "date"],
-            how="left"
+            on=["itemid", "snapshot_day"],
+            how="left",
         )
         .withColumn(
             "transactions",
             F.coalesce(
                 F.col("transactions"),
-                F.lit(0)
-            )
-        )
-        .withColumn(
-            "snapshot_day",
-            F.datediff(
-                F.col("date"),
-                F.lit("1970-01-01")
-            )
+                F.lit(0),
+            ),
         )
     )
 
@@ -424,18 +463,18 @@ def build_item_popularity_features(df: DataFrame, snapshot_data: DataFrame) -> D
             "item_transactions_30d",
             F.coalesce(
                 F.sum("transactions").over(item_window_30d),
-                F.lit(0)
-            )
+                F.lit(0),
+            ),
         )
     )
 
     top_10_threshold = (
         item_daily_transactions
-        .groupBy("date")
+        .groupBy("snapshot_day")
         .agg(
             F.percentile_approx(
                 "item_transactions_30d",
-                0.90
+                0.90,
             ).alias("top_10_threshold")
         )
     )
@@ -444,16 +483,16 @@ def build_item_popularity_features(df: DataFrame, snapshot_data: DataFrame) -> D
         item_daily_transactions
         .join(
             top_10_threshold,
-            on="date",
-            how="left"
+            on="snapshot_day",
+            how="left",
         )
         .withColumn(
             "is_top_seller",
             F.when(
                 F.col("item_transactions_30d")
                 >= F.col("top_10_threshold"),
-                1
-            ).otherwise(0)
+                1,
+            ).otherwise(0),
         )
     )
 
@@ -463,30 +502,33 @@ def build_item_popularity_features(df: DataFrame, snapshot_data: DataFrame) -> D
         .select(
             "visitorid",
             "itemid",
-            "date"
+            "snapshot_day",
         )
         .join(
             item_daily_transactions.select(
                 "itemid",
-                "date",
+                "snapshot_day",
                 "item_transactions_30d",
-                "is_top_seller"
+                "is_top_seller",
             ),
-            on=["itemid", "date"],
-            how="left"
+            on=["itemid", "snapshot_day"],
+            how="left",
         )
     )
 
     daily_cart_stats = (
         cart_events
-        .groupBy("visitorid", "date")
+        .groupBy(
+            "visitorid",
+            "snapshot_day",
+        )
         .agg(
             F.sum("item_transactions_30d")
             .alias("cart_item_popularity_sum"),
             F.count("*")
             .alias("cart_count"),
             F.sum("is_top_seller")
-            .alias("top_seller_cart_count")
+            .alias("top_seller_cart_count"),
         )
     )
 
@@ -494,36 +536,29 @@ def build_item_popularity_features(df: DataFrame, snapshot_data: DataFrame) -> D
         daily_cart_stats
         .join(
             snapshot_data,
-            on=["visitorid", "date"],
-            how="right"
+            on=["visitorid", "snapshot_day"],
+            how="right",
         )
         .withColumn(
             "cart_item_popularity_sum",
             F.coalesce(
                 F.col("cart_item_popularity_sum"),
-                F.lit(0)
-            )
+                F.lit(0),
+            ),
         )
         .withColumn(
             "cart_count",
             F.coalesce(
                 F.col("cart_count"),
-                F.lit(0)
-            )
+                F.lit(0),
+            ),
         )
         .withColumn(
             "top_seller_cart_count",
             F.coalesce(
                 F.col("top_seller_cart_count"),
-                F.lit(0)
-            )
-        )
-        .withColumn(
-            "snapshot_day",
-            F.datediff(
-                F.col("date"),
-                F.lit("1970-01-01")
-            )
+                F.lit(0),
+            ),
         )
     )
 
@@ -539,61 +574,65 @@ def build_item_popularity_features(df: DataFrame, snapshot_data: DataFrame) -> D
         .withColumn(
             "cart_item_popularity_sum_7d",
             F.coalesce(
-                F.sum("cart_item_popularity_sum")
-                .over(user_window_7d),
-                F.lit(0)
-            )
+                F.sum(
+                    "cart_item_popularity_sum"
+                ).over(user_window_7d),
+                F.lit(0),
+            ),
         )
         .withColumn(
             "cart_count_7d",
             F.coalesce(
-                F.sum("cart_count")
-                .over(user_window_7d),
-                F.lit(0)
-            )
+                F.sum("cart_count").over(user_window_7d),
+                F.lit(0),
+            ),
         )
         .withColumn(
             "top_seller_cart_count_7d",
             F.coalesce(
-                F.sum("top_seller_cart_count")
-                .over(user_window_7d),
-                F.lit(0)
-            )
+                F.sum(
+                    "top_seller_cart_count"
+                ).over(user_window_7d),
+                F.lit(0),
+            ),
         )
         .withColumn(
             "user_cart_items_avg_popularity_7d",
             F.coalesce(
                 F.try_divide(
                     "cart_item_popularity_sum_7d",
-                    "cart_count_7d"
+                    "cart_count_7d",
                 ),
-                F.lit(0)
-            )
+                F.lit(0),
+            ),
         )
         .withColumn(
             "user_cart_top_seller_ratio_7d",
             F.coalesce(
                 F.try_divide(
                     "top_seller_cart_count_7d",
-                    "cart_count_7d"
+                    "cart_count_7d",
                 ),
-                F.lit(0)
-            )
+                F.lit(0),
+            ),
         )
     )
 
     return features.select(
         "visitorid",
-        "date",
+        "snapshot_day",
         "user_cart_items_avg_popularity_7d",
-        "user_cart_top_seller_ratio_7d"
+        "user_cart_top_seller_ratio_7d",
     )
 
 
 def write_gold(df: DataFrame) -> None:
     path = layer_path("gold")
 
-    logger.info("Writing gold layer", extra={"path": path})
+    logger.info(
+        "Writing gold layer",
+        extra={"path": path},
+    )
 
     df.write.mode("overwrite").parquet(path)
 
@@ -602,33 +641,44 @@ def run(spark: SparkSession) -> None:
 
     silver_df = read_silver(spark)
 
+    silver_df = add_snapshot_day(silver_df)
+
     snapshots_df = build_snapshot_dates(silver_df)
 
-    event_features = build_user_behavior(silver_df, snapshots_df)
+    event_features = build_user_behavior(
+        silver_df,
+        snapshots_df,
+    )
 
-    session_features = build_session_features(silver_df, snapshots_df,)
+    session_features = build_session_features(
+        silver_df,
+        snapshots_df,
+    )
 
-    popularity_features = build_item_popularity_features(silver_df, snapshots_df)
+    popularity_features = build_item_popularity_features(
+        silver_df,
+        snapshots_df,
+    )
 
     gold_df = (
         event_features
         .join(
-            session_features, 
-            on=["visitorid", "date"], 
-            how="left"
+            session_features,
+            on=["visitorid", "snapshot_day"],
+            how="left",
         )
         .join(
-            popularity_features, 
-            on=["visitorid", "date"], 
-            how="left"
+            popularity_features,
+            on=["visitorid", "snapshot_day"],
+            how="left",
         )
     )
-    
+
     write_gold(gold_df)
 
     logger.info(
         "Gold processing complete",
-        extra={"row_count": gold_df.count()}
+        extra={"row_count": gold_df.count()},
     )
 
 
@@ -637,7 +687,9 @@ if __name__ == "__main__":
 
     spark = (
         SparkSession.builder
-        .appName(f"silver-to-gold-{config.environment}")
+        .appName(
+            f"silver-to-gold-{config.environment}"
+        )
         .getOrCreate()
     )
 
