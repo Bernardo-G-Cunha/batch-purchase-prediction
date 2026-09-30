@@ -225,8 +225,10 @@ deprecated/
 
 .venv/
 
-mlruns/
-
 *.parquet
 !research/data/processed/processed_data.parquet
 *.csv
+
+**/mlruns/
+**/mlflow/artifacts/
+mlflow.db
