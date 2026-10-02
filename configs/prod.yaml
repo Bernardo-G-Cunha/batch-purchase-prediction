@@ -1,0 +1,7 @@
+storage:
+  mode: databricks
+  databricks_volume_path: /Volumes/workspace/default/retailrocket_data
+  raw_path: /Volumes/workspace/default/retailrocket_data/raw
+  inference_path: /Volumes/workspace/default/retailrocket_data/inference
+  quarantine_path: /Volumes/workspace/default/retailrocket_data/quarantine
+  

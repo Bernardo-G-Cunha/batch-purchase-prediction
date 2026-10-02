@@ -25,12 +25,12 @@ class StorageConfig(BaseModel):
     processing code — only src/common/storage_paths.py, which is the
     single place that knows how to build a path for each mode.
     """
-
-    mode: Literal["local", "azure"] = "local"
+    mode: Literal["local", "azure", "databricks"] = "local"
     local_base_path: str = "./data"
     raw_path: str = "./data/raw"
     quarantine_path: str = "./data/quarantine"
     inference_path: str = "./data/inference"
+    databricks_volume_path: str | None = None
     account_name: str | None = None
 
 

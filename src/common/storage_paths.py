@@ -24,6 +24,15 @@ def layer_path(layer: Layer, *, config: AppConfig | None = None) -> str:
         path.mkdir(parents=True, exist_ok=True)
         return str(path)
 
+    if config.storage.mode == "databricks":
+        if config.storage.databricks_volume_path is None:
+            raise ValueError(
+                "storage.databricks_volume_path must be set "
+                "when storage.mode == 'databricks'"
+            )
+
+        return f"{config.storage.databricks_volume_path.rstrip('/')}/{layer}"
+
     if config.storage.account_name is None:
         raise ValueError(
             "storage.account_name must be set in the config when storage.mode == 'azure'"
