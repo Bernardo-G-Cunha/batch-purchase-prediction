@@ -24,18 +24,25 @@ MODEL_FEATURES = [
 
 
 def configure_mlflow() -> None:
-    """Configure MLflow tracking."""
+    """Configure MLflow."""
 
     config = get_config()
 
-    mlflow.set_tracking_uri(
-        config.mlflow.tracking_uri
-    )
+    if config.mlflow.tracking_uri:
+        mlflow.set_tracking_uri(
+            config.mlflow.tracking_uri
+        )
+
+    if config.mlflow.registry_uri:
+        mlflow.set_registry_uri(
+            config.mlflow.registry_uri
+        )
 
     logger.info(
         "MLflow configured",
         extra={
             "tracking_uri": config.mlflow.tracking_uri,
+            "registry_uri": config.mlflow.registry_uri,
         },
     )
 
@@ -56,15 +63,22 @@ def read_gold(spark: SparkSession) -> DataFrame:
 def load_model():
     """Load the production prediction model."""
 
+    config = get_config()
+
+    model_uri = (
+        f"models:/{config.mlflow.model_name}"
+        f"@{config.mlflow.model_alias}"
+    )
+
     model = mlflow.pyfunc.load_model(
-        "models:/RetailRocketPurchaseModel@production"
+        model_uri
     )
 
     logger.info(
         "Production model loaded",
         extra={
-            "model": "RetailRocketPurchaseModel",
-            "alias": "production",
+            "model": config.mlflow.model_name,
+            "alias": config.mlflow.model_alias,
         },
     )
 

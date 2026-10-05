@@ -4,4 +4,10 @@ storage:
   raw_path: /Volumes/workspace/default/retailrocket_data/raw
   inference_path: /Volumes/workspace/default/retailrocket_data/inference
   quarantine_path: /Volumes/workspace/default/retailrocket_data/quarantine
-  
+
+mlflow:
+  experiment_name: RetailRocket_Purchase_Prediction
+  tracking_uri: null
+  registry_uri: databricks-uc
+  model_name: workspace.default.RetailRocketPurchaseModel
+  model_alias: production

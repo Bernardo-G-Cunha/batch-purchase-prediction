@@ -4,7 +4,7 @@ storage:
   raw_path: ./data/raw
   inference_path: ./data/inference
   quarantine_path: ./data/quarantine
-  account_name: null  # set in prod/staging yaml, or via env var later if needed
+  account_name: null
 
 medallion:
   bronze_container: bronze
@@ -14,6 +14,9 @@ medallion:
 mlflow:
   experiment_name: RetailRocket_Purchase_Prediction
   tracking_uri: null
+  registry_uri: null
+  model_name: RetailRocketPurchaseModel
+  model_alias: production
 
 logging:
   level: INFO

@@ -43,6 +43,7 @@ class MedallionConfig(BaseModel):
 class MLflowConfig(BaseModel):
     experiment_name: str
     tracking_uri: str | None = None
+    registry_uri: str | None = None
 
 
 class LoggingConfig(BaseModel):
