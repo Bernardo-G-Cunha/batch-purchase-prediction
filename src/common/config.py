@@ -44,6 +44,8 @@ class MLflowConfig(BaseModel):
     experiment_name: str
     tracking_uri: str | None = None
     registry_uri: str | None = None
+    model_name: str | None = None
+    model_alias: str | None = None
 
 
 class LoggingConfig(BaseModel):
