@@ -1,4 +1,4 @@
-# RetailRocket ML Pipeline
+# Batch Purchase Prediction
 
 A batch Machine Learning pipeline built around the RetailRocket e-commerce event dataset.
 
